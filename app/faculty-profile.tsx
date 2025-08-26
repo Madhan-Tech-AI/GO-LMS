@@ -20,6 +20,7 @@ export default function FacultyProfile() {
   const [faculty, setFaculty] = useState<Faculty | null>(null);
   const [currentStudent, setCurrentStudent] = useState<any>(null);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isRequested, setIsRequested] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -44,46 +45,45 @@ export default function FacultyProfile() {
       if (currentUserData) {
         const student = JSON.parse(currentUserData);
         setCurrentStudent(student);
-        setIsFollowing(student.followedFaculty.includes(staffId));
+        setIsFollowing(Array.isArray(student.followedFaculty) && student.followedFaculty.includes(staffId));
+        // Check if request already sent
+        const facRaw = await AsyncStorage.getItem(`faculty_${staffId}`);
+        if (facRaw) {
+          const f = JSON.parse(facRaw);
+          const reqs = Array.isArray(f.followRequests) ? f.followRequests : [];
+          setIsRequested(reqs.some((r: any) => r.registerNumber === student.registerNumber));
+        }
       }
     } catch (error) {
       console.error('Failed to load current student:', error);
     }
   };
 
-  const handleFollow = async () => {
+  const handleFollowRequest = async () => {
     if (!faculty || !currentStudent) return;
+    if (isFollowing) return;
+    if (isRequested) return;
 
     try {
-      const updatedFollowing = isFollowing
-        ? currentStudent.followedFaculty.filter((id: string) => id !== staffId)
-        : [...currentStudent.followedFaculty, staffId];
-
-      const updatedStudent = {
-        ...currentStudent,
-        followedFaculty: updatedFollowing,
-      };
-
-      const updatedFacultyFollowers = isFollowing
-        ? faculty.followers.filter(id => id !== currentStudent.registerNumber)
-        : [...faculty.followers, currentStudent.registerNumber];
-
-      const updatedFaculty = {
-        ...faculty,
-        followers: updatedFacultyFollowers,
-      };
-
-      await AsyncStorage.setItem('currentUser', JSON.stringify(updatedStudent));
-      await AsyncStorage.setItem(`student_${currentStudent.registerNumber}`, JSON.stringify(updatedStudent));
-      await AsyncStorage.setItem(`faculty_${staffId}`, JSON.stringify(updatedFaculty));
-
-      setIsFollowing(!isFollowing);
-      setCurrentStudent(updatedStudent);
-      setFaculty(updatedFaculty);
-
-      Alert.alert('Success', isFollowing ? 'Unfollowed successfully!' : 'Following successfully!');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update follow status');
+      const facKey = `faculty_${staffId}`;
+      const raw = await AsyncStorage.getItem(facKey);
+      if (!raw) return;
+      const f = JSON.parse(raw);
+      f.followRequests = Array.isArray(f.followRequests) ? f.followRequests : [];
+      // avoid duplicates
+      if (!f.followRequests.some((r: any) => r.registerNumber === currentStudent.registerNumber)) {
+        f.followRequests.push({
+          registerNumber: currentStudent.registerNumber,
+          studentName: currentStudent.studentName,
+          department: currentStudent.department,
+          requestedAt: new Date().toISOString(),
+        });
+        await AsyncStorage.setItem(facKey, JSON.stringify(f));
+        setIsRequested(true);
+        Alert.alert('Request sent', 'Your follow request has been sent.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Could not send request');
     }
   };
 
@@ -142,8 +142,9 @@ export default function FacultyProfile() {
         </View>
 
         <TouchableOpacity
-          style={[styles.followButton, isFollowing && styles.unfollowButton]}
-          onPress={handleFollow}
+          style={[styles.followButton, (isFollowing || isRequested) && styles.unfollowButton]}
+          onPress={handleFollowRequest}
+          disabled={isFollowing || isRequested}
         >
           {isFollowing ? (
             <UserCheck size={20} color={colors.white} />
@@ -151,7 +152,7 @@ export default function FacultyProfile() {
             <UserPlus size={20} color={colors.white} />
           )}
           <Text style={styles.followButtonText}>
-            {isFollowing ? 'Following' : 'Follow'}
+            {isFollowing ? 'Following' : isRequested ? 'Requested' : 'Request Follow'}
           </Text>
         </TouchableOpacity>
       </View>

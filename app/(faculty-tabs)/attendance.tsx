@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, FlatList, StyleSheet, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, typography } from '@/constants/theme';
 import { Users, CircleCheck as CheckCircle, Circle as XCircle, Calendar } from 'lucide-react-native';
@@ -14,6 +14,8 @@ interface Student {
 export default function Attendance() {
   const [students, setStudents] = useState<Student[]>([]);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toLocaleDateString());
+  const [sessionTitle, setSessionTitle] = useState('');
+  const [sessionId, setSessionId] = useState<string>('');
 
   useEffect(() => {
     loadFollowingStudents();
@@ -32,7 +34,7 @@ export default function Attendance() {
         
         const followingStudents = studentData
           .map(([key, value]) => JSON.parse(value || '{}'))
-          .filter(student => student.followedFaculty.includes(faculty.staffId))
+          .filter(student => Array.isArray(student.followedFaculty) && student.followedFaculty.includes(faculty.staffId))
           .map(student => ({
             registerNumber: student.registerNumber,
             studentName: student.studentName,
@@ -59,7 +61,13 @@ export default function Attendance() {
 
   const saveAttendance = async () => {
     try {
+      if (!sessionTitle.trim()) {
+        setSessionTitle('Class Session');
+      }
+      const id = sessionId || Date.now().toString();
       const attendanceRecord = {
+        id,
+        title: sessionTitle.trim() || 'Class Session',
         date: attendanceDate,
         students: students.map(student => ({
           registerNumber: student.registerNumber,
@@ -70,7 +78,8 @@ export default function Attendance() {
 
       const existingAttendance = await AsyncStorage.getItem('attendance_records');
       const records = existingAttendance ? JSON.parse(existingAttendance) : [];
-      records.push(attendanceRecord);
+      const idx = records.findIndex((r: any) => r.id === id);
+      if (idx >= 0) records[idx] = attendanceRecord; else records.push(attendanceRecord);
 
       await AsyncStorage.setItem('attendance_records', JSON.stringify(records));
       Alert.alert('Success', 'Attendance saved successfully!');
@@ -113,6 +122,15 @@ export default function Attendance() {
           <Calendar size={20} color={colors.text.secondary} />
           <Text style={styles.dateText}>{attendanceDate}</Text>
         </View>
+      </View>
+
+      <View style={styles.sessionCard}>
+        <TextInput
+          style={styles.sessionInput}
+          placeholder="Session title (e.g., CS101 - Lecture 5)"
+          value={sessionTitle}
+          onChangeText={setSessionTitle}
+        />
       </View>
 
       <View style={styles.summaryCard}>
@@ -197,6 +215,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  sessionCard: {
+    backgroundColor: colors.white,
+    marginHorizontal: spacing.lg,
+    borderRadius: 12,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  sessionInput: {
+    backgroundColor: colors.background.secondary,
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: typography.fontSize.md,
   },
   summaryItem: {
     alignItems: 'center',

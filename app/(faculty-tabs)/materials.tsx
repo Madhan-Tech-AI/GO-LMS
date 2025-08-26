@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, FlatList, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, FlatList, StyleSheet, Alert, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import { colors, spacing, typography } from '@/constants/theme';
@@ -11,11 +11,20 @@ interface Material {
   type: 'pdf' | 'image' | 'link';
   uri: string;
   uploadDate: string;
+  category: 'notes' | 'pdf' | 'video';
+  visibility: 'followers' | 'public' | 'custom';
+  audience?: string[]; // registerNumbers when custom
+  facultyId: string;
+  facultyName: string;
 }
 
 export default function Materials() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [currentFaculty, setCurrentFaculty] = useState<any>(null);
+  const [category, setCategory] = useState<'notes' | 'pdf' | 'video'>('pdf');
+  const [visibility, setVisibility] = useState<'followers' | 'public' | 'custom'>('followers');
+  const [customAudience, setCustomAudience] = useState(''); // comma-separated registerNumbers
+  const [linkUri, setLinkUri] = useState('');
 
   useEffect(() => {
     loadMaterials();
@@ -55,23 +64,53 @@ export default function Materials() {
 
   const uploadFile = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/*'],
-        copyToCacheDirectory: true,
-      });
+      let newMat: Material | null = null;
+      if (category === 'pdf' || category === 'video' || category === 'notes') {
+        if (category === 'pdf' || category === 'video') {
+          const result = await DocumentPicker.getDocumentAsync({
+            type: category === 'pdf' ? ['application/pdf'] : ['video/*'],
+            copyToCacheDirectory: true,
+          });
+          if (!result.canceled && result.assets && result.assets.length > 0) {
+            const file = result.assets[0];
+            newMat = {
+              id: Date.now().toString(),
+              title: file.name,
+              type: category === 'pdf' ? 'pdf' : 'link',
+              uri: file.uri,
+              uploadDate: new Date().toISOString(),
+              category,
+              visibility,
+              audience: visibility === 'custom' ? customAudience.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+              facultyId: currentFaculty?.staffId,
+              facultyName: currentFaculty?.staffName,
+            };
+          }
+        } else if (category === 'notes') {
+          if (!linkUri.trim()) {
+            Alert.alert('Info', 'Enter a link or short notes in the field');
+            return;
+          }
+          newMat = {
+            id: Date.now().toString(),
+            title: 'Notes',
+            type: 'link',
+            uri: linkUri.trim(),
+            uploadDate: new Date().toISOString(),
+            category,
+            visibility,
+            audience: visibility === 'custom' ? customAudience.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+            facultyId: currentFaculty?.staffId,
+            facultyName: currentFaculty?.staffName,
+          };
+        }
+      }
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const file = result.assets[0];
-        const newMaterial: Material = {
-          id: Date.now().toString(),
-          title: file.name,
-          type: file.mimeType?.includes('pdf') ? 'pdf' : 'image',
-          uri: file.uri,
-          uploadDate: new Date().toISOString(),
-        };
-
-        const updatedMaterials = [...materials, newMaterial];
+      if (newMat) {
+        const updatedMaterials = [...materials, newMat];
         await saveMaterials(updatedMaterials);
+        setLinkUri('');
+        setCustomAudience('');
         Alert.alert('Success', 'Material uploaded successfully!');
       }
     } catch (error) {
@@ -126,6 +165,45 @@ export default function Materials() {
         </TouchableOpacity>
       </View>
 
+      <View style={styles.controls}>
+        <View style={styles.row}>
+          <Text style={styles.label}>Category:</Text>
+          <View style={styles.chipsRow}>
+            {(['pdf','video','notes'] as const).map(opt => (
+              <TouchableOpacity key={opt} style={[styles.chip, category===opt && styles.chipActive]} onPress={()=>setCategory(opt)}>
+                <Text style={[styles.chipText, category===opt && styles.chipTextActive]}>{opt}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+        <View style={styles.row}>
+          <Text style={styles.label}>Visibility:</Text>
+          <View style={styles.chipsRow}>
+            {(['followers','public','custom'] as const).map(v => (
+              <TouchableOpacity key={v} style={[styles.chip, visibility===v && styles.chipActive]} onPress={()=>setVisibility(v)}>
+                <Text style={[styles.chipText, visibility===v && styles.chipTextActive]}>{v}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+        {visibility === 'custom' && (
+          <TextInput
+            style={styles.input}
+            placeholder="Audience register numbers (comma separated)"
+            value={customAudience}
+            onChangeText={setCustomAudience}
+          />
+        )}
+        {category === 'notes' && (
+          <TextInput
+            style={styles.input}
+            placeholder="Notes link or content"
+            value={linkUri}
+            onChangeText={setLinkUri}
+          />
+        )}
+      </View>
+
       {materials.length === 0 ? (
         <View style={styles.emptyState}>
           <Upload size={48} color={colors.text.secondary} />
@@ -140,6 +218,7 @@ export default function Materials() {
           renderItem={renderMaterial}
           keyExtractor={(item) => item.id}
           style={styles.list}
+          contentContainerStyle={{ paddingBottom: spacing.xl }}
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -164,6 +243,54 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xxl,
     fontWeight: typography.fontWeight.bold,
     color: colors.primary.main,
+  },
+  controls: {
+    backgroundColor: colors.white,
+    marginHorizontal: spacing.lg,
+    borderRadius: 12,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  row: {
+    marginBottom: spacing.md,
+  },
+  label: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  chip: {
+    backgroundColor: colors.background.secondary,
+    borderRadius: 14,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  chipActive: {
+    backgroundColor: colors.primary.main,
+  },
+  chipText: {
+    color: colors.text.primary,
+    fontSize: typography.fontSize.sm,
+  },
+  chipTextActive: {
+    color: colors.white,
+  },
+  input: {
+    backgroundColor: colors.background.secondary,
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: typography.fontSize.md,
   },
   uploadButton: {
     backgroundColor: colors.primary.main,

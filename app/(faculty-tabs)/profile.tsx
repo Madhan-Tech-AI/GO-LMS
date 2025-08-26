@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, typography } from '@/constants/theme';
 import { User, Mail, Phone, Building, CreditCard as Edit } from 'lucide-react-native';
@@ -63,7 +63,7 @@ export default function FacultyProfile() {
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: spacing.xl }}>
       <View style={styles.header}>
         <Text style={styles.title}>Profile</Text>
         <TouchableOpacity
@@ -194,7 +194,7 @@ export default function FacultyProfile() {
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 

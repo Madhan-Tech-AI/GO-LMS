@@ -11,12 +11,15 @@ interface Message {
   sender: string;
   senderType: 'faculty' | 'student';
   timestamp: string;
+  threadId: string;
 }
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [recipientId, setRecipientId] = useState<string>('');
+  const [availableRecipients, setAvailableRecipients] = useState<{ id: string; name: string }[]>([]);
   const router = useRouter();
 
   useEffect(() => {
@@ -28,10 +31,37 @@ export default function ChatScreen() {
     try {
       const userData = await AsyncStorage.getItem('currentUser');
       if (userData) {
-        setCurrentUser(JSON.parse(userData));
+        const u = JSON.parse(userData);
+        setCurrentUser(u);
+        await loadRecipients(u);
       }
     } catch (error) {
       console.error('Failed to load user data:', error);
+    }
+  };
+
+  const loadRecipients = async (u: any) => {
+    // Students can message followed faculty; faculty can message followers
+    if (u.userType === 'student') {
+      const followed: string[] = Array.isArray(u.followedFaculty) ? u.followedFaculty : [];
+      const keys = followed.map((fid) => `faculty_${fid}`);
+      const pairs = await AsyncStorage.multiGet(keys);
+      const recips = pairs
+        .map(([k, v]) => (v ? JSON.parse(v) : null))
+        .filter(Boolean)
+        .map((f: any) => ({ id: f.staffId, name: f.staffName }));
+      setAvailableRecipients(recips);
+      if (recips[0]) setRecipientId(recips[0].id);
+    } else if (u.userType === 'faculty') {
+      const followerIds: string[] = Array.isArray(u.followers) ? u.followers : [];
+      const keys = followerIds.map((rn) => `student_${rn}`);
+      const pairs = await AsyncStorage.multiGet(keys);
+      const recips = pairs
+        .map(([k, v]) => (v ? JSON.parse(v) : null))
+        .filter(Boolean)
+        .map((s: any) => ({ id: s.registerNumber, name: s.studentName }));
+      setAvailableRecipients(recips);
+      if (recips[0]) setRecipientId(recips[0].id);
     }
   };
 
@@ -46,8 +76,14 @@ export default function ChatScreen() {
     }
   };
 
+  const makeThreadId = (aType: string, aId: string, bType: string, bId: string) => {
+    const one = `${aType}:${aId}`;
+    const two = `${bType}:${bId}`;
+    return [one, two].sort().join('|');
+  };
+
   const sendMessage = async () => {
-    if (!newMessage.trim() || !currentUser) return;
+    if (!newMessage.trim() || !currentUser || !recipientId) return;
 
     const message: Message = {
       id: Date.now().toString(),
@@ -55,6 +91,9 @@ export default function ChatScreen() {
       sender: currentUser.userType === 'faculty' ? currentUser.staffName : currentUser.studentName,
       senderType: currentUser.userType,
       timestamp: new Date().toISOString(),
+      threadId: currentUser.userType === 'student'
+        ? makeThreadId('student', currentUser.registerNumber, 'faculty', recipientId)
+        : makeThreadId('faculty', currentUser.staffId, 'student', recipientId),
     };
 
     const updatedMessages = [...messages, message];
@@ -94,6 +133,13 @@ export default function ChatScreen() {
     );
   };
 
+  const threadId = currentUser
+    ? (currentUser.userType === 'student'
+        ? makeThreadId('student', currentUser.registerNumber, 'faculty', recipientId)
+        : makeThreadId('faculty', currentUser.staffId, 'student', recipientId))
+    : '';
+  const visibleMessages = threadId ? messages.filter((m) => m.threadId === threadId) : [];
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -103,7 +149,7 @@ export default function ChatScreen() {
         <Text style={styles.title}>Messages</Text>
       </View>
 
-      {messages.length === 0 ? (
+      {visibleMessages.length === 0 ? (
         <View style={styles.emptyState}>
           <MessageCircle size={48} color={colors.text.secondary} />
           <Text style={styles.emptyStateText}>No messages yet</Text>
@@ -113,7 +159,7 @@ export default function ChatScreen() {
         </View>
       ) : (
         <FlatList
-          data={messages}
+          data={visibleMessages}
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
           style={styles.messagesList}
@@ -122,6 +168,26 @@ export default function ChatScreen() {
       )}
 
       <View style={styles.inputContainer}>
+        <View style={styles.recipientBar}>
+          <Text style={styles.recipientLabel}>To:</Text>
+          <FlatList
+            data={availableRecipients}
+            horizontal
+            keyExtractor={(i) => i.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.recipientChip, recipientId === item.id && styles.recipientChipActive]}
+                onPress={() => setRecipientId(item.id)}
+              >
+                <Text style={[styles.recipientChipText, recipientId === item.id && styles.recipientChipTextActive]}>
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            )}
+            contentContainerStyle={{ paddingRight: spacing.md }}
+            showsHorizontalScrollIndicator={false}
+          />
+        </View>
         <TextInput
           style={styles.messageInput}
           placeholder="Type a message..."
@@ -217,6 +283,36 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border.light,
     alignItems: 'flex-end',
+  },
+  recipientBar: {
+    position: 'absolute',
+    top: -48,
+    left: 0,
+    right: 0,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xs,
+  },
+  recipientLabel: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+  },
+  recipientChip: {
+    backgroundColor: colors.background.secondary,
+    borderRadius: 16,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    marginRight: spacing.xs,
+  },
+  recipientChipActive: {
+    backgroundColor: colors.primary.main,
+  },
+  recipientChipText: {
+    color: colors.text.primary,
+    fontSize: typography.fontSize.sm,
+  },
+  recipientChipTextActive: {
+    color: colors.white,
   },
   messageInput: {
     flex: 1,

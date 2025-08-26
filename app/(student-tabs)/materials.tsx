@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, typography } from '@/constants/theme';
 import { BookOpen, FileText, Image, Link, Download, Bookmark } from 'lucide-react-native';
@@ -11,6 +11,10 @@ interface Material {
   uri: string;
   uploadDate: string;
   facultyName: string;
+  facultyId: string;
+  category: 'notes' | 'pdf' | 'video';
+  visibility: 'followers' | 'public' | 'custom';
+  audience?: string[];
 }
 
 export default function StudentMaterials() {
@@ -33,12 +37,14 @@ export default function StudentMaterials() {
         if (allMaterials) {
           const materialsData = JSON.parse(allMaterials);
           
-          // Filter materials from followed faculty
-          const followedMaterials = materialsData.filter((material: any) =>
-            student.followedFaculty.some((facultyId: string) => 
-              material.facultyId === facultyId
-            )
-          );
+          // Visibility: public OR followers AND following OR custom includes student
+          const followedMaterials = materialsData.filter((material: any) => {
+            const isFromFollowed = student.followedFaculty?.includes(material.facultyId);
+            if (material.visibility === 'public') return true;
+            if (material.visibility === 'followers') return isFromFollowed;
+            if (material.visibility === 'custom') return Array.isArray(material.audience) && material.audience.includes(student.registerNumber);
+            return false;
+          });
           
           setMaterials(followedMaterials);
         }

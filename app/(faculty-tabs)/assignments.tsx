@@ -11,6 +11,8 @@ interface Assignment {
   dueDate: string;
   createdDate: string;
   submissions: number;
+  facultyId: string;
+  facultyName: string;
 }
 
 export default function Assignments() {
@@ -21,9 +23,14 @@ export default function Assignments() {
     description: '',
     dueDate: '',
   });
+  const [currentFaculty, setCurrentFaculty] = useState<any>(null);
 
   useEffect(() => {
     loadAssignments();
+    (async () => {
+      const u = await AsyncStorage.getItem('currentUser');
+      if (u) setCurrentFaculty(JSON.parse(u));
+    })();
   }, []);
 
   const loadAssignments = async () => {
@@ -59,10 +66,27 @@ export default function Assignments() {
       dueDate: formData.dueDate,
       createdDate: new Date().toISOString(),
       submissions: 0,
+      facultyId: currentFaculty?.staffId,
+      facultyName: currentFaculty?.staffName,
     };
 
     const updatedAssignments = [...assignments, newAssignment];
     await saveAssignments(updatedAssignments);
+
+    // Sync to calendar as assignment event
+    try {
+      const eventsRaw = await AsyncStorage.getItem('calendar_events');
+      const events = eventsRaw ? JSON.parse(eventsRaw) : [];
+      events.push({
+        id: `ass_${newAssignment.id}`,
+        title: `Assignment: ${newAssignment.title}`,
+        date: formData.dueDate.split('/').reverse().join('-'),
+        time: '11:59 PM',
+        type: 'assignment',
+        description: newAssignment.description,
+      });
+      await AsyncStorage.setItem('calendar_events', JSON.stringify(events));
+    } catch {}
     
     setFormData({ title: '', description: '', dueDate: '' });
     setShowForm(false);
@@ -76,6 +100,7 @@ export default function Assignments() {
         <View style={styles.cardInfo}>
           <Text style={styles.cardTitle}>{item.title}</Text>
           <Text style={styles.cardDescription}>{item.description}</Text>
+          <Text style={styles.cardDescription}>By: {item.facultyName}</Text>
         </View>
       </View>
       
@@ -86,6 +111,19 @@ export default function Assignments() {
         </View>
         <Text style={styles.submissionText}>{item.submissions} submissions</Text>
       </View>
+
+      <TouchableOpacity
+        style={styles.createButton}
+        onPress={async () => {
+          // Open submissions list (simple alert with count)
+          const raw = await AsyncStorage.getItem('assignment_submissions');
+          const list = raw ? JSON.parse(raw) : [];
+          const subs = list.filter((s: any) => s.assignmentId === item.id);
+          Alert.alert('Submissions', `${subs.length} submissions`);
+        }}
+      >
+        <Text style={styles.createButtonText}>View Submissions</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -156,6 +194,7 @@ export default function Assignments() {
           renderItem={renderAssignment}
           keyExtractor={(item) => item.id}
           style={styles.list}
+          contentContainerStyle={{ paddingBottom: spacing.xl }}
           showsVerticalScrollIndicator={false}
         />
       )}

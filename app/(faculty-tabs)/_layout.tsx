@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Chrome as Home, BookOpen, ClipboardCheck, Users, User } from 'lucide-react-native';
+import { Chrome as Home, BookOpen, ClipboardCheck, Users, User, Inbox, ListChecks } from 'lucide-react-native';
 import { colors } from '@/constants/theme';
 
 export default function FacultyTabLayout() {
@@ -47,11 +47,29 @@ export default function FacultyTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="quizzes"
+        options={{
+          title: 'Quizzes',
+          tabBarIcon: ({ size, color }) => (
+            <ListChecks size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="attendance"
         options={{
           title: 'Attendance',
           tabBarIcon: ({ size, color }) => (
             <Users size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="requests"
+        options={{
+          title: 'Requests',
+          tabBarIcon: ({ size, color }) => (
+            <Inbox size={size} color={color} />
           ),
         }}
       />

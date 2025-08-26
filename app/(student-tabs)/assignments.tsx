@@ -11,6 +11,7 @@ interface Assignment {
   dueDate: string;
   facultyName: string;
   isSubmitted?: boolean;
+  facultyId?: string;
 }
 
 export default function StudentAssignments() {
@@ -73,6 +74,39 @@ export default function StudentAssignments() {
     return colors.warning.main;
   };
 
+  const submitAssignment = async (assignmentId: string) => {
+    try {
+      const userData = await AsyncStorage.getItem('currentUser');
+      if (!userData) return;
+      const student = JSON.parse(userData);
+      const submissionsRaw = await AsyncStorage.getItem('assignment_submissions');
+      const submissions = submissionsRaw ? JSON.parse(submissionsRaw) : [];
+      const existing = submissions.find((s: any) => s.assignmentId === assignmentId && s.registerNumber === student.registerNumber);
+      if (existing) return;
+      submissions.push({
+        id: Date.now().toString(),
+        assignmentId,
+        registerNumber: student.registerNumber,
+        studentName: student.studentName,
+        submittedAt: new Date().toISOString(),
+        grade: null,
+      });
+      await AsyncStorage.setItem('assignment_submissions', JSON.stringify(submissions));
+      // increment faculty assignment submissions count
+      const allAssignmentsRaw = await AsyncStorage.getItem('faculty_assignments');
+      if (allAssignmentsRaw) {
+        const list = JSON.parse(allAssignmentsRaw);
+        const idx = list.findIndex((a: any) => a.id === assignmentId);
+        if (idx >= 0) {
+          list[idx].submissions = (list[idx].submissions || 0) + 1;
+          await AsyncStorage.setItem('faculty_assignments', JSON.stringify(list));
+        }
+      }
+      // mark local state as submitted
+      setAssignments(prev => prev.map(a => a.id === assignmentId ? { ...a, isSubmitted: true } : a));
+    } catch (e) {}
+  };
+
   const renderAssignment = ({ item }: { item: Assignment }) => (
     <View style={styles.assignmentCard}>
       <View style={styles.cardHeader}>
@@ -99,7 +133,7 @@ export default function StudentAssignments() {
       </View>
       
       {!item.isSubmitted && !isOverdue(item.dueDate) && (
-        <TouchableOpacity style={styles.submitButton}>
+        <TouchableOpacity style={styles.submitButton} onPress={() => submitAssignment(item.id)}>
           <Text style={styles.submitButtonText}>Submit Assignment</Text>
         </TouchableOpacity>
       )}
@@ -126,6 +160,7 @@ export default function StudentAssignments() {
           renderItem={renderAssignment}
           keyExtractor={(item) => item.id}
           style={styles.list}
+          contentContainerStyle={{ paddingBottom: spacing.xl }}
           showsVerticalScrollIndicator={false}
         />
       )}

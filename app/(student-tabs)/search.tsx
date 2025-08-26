@@ -17,10 +17,12 @@ export default function FacultySearch() {
   const [searchQuery, setSearchQuery] = useState('');
   const [facultyList, setFacultyList] = useState<Faculty[]>([]);
   const [filteredFaculty, setFilteredFaculty] = useState<Faculty[]>([]);
+  const [currentStudent, setCurrentStudent] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
     loadFacultyList();
+    loadCurrentStudent();
   }, []);
 
   useEffect(() => {
@@ -41,18 +43,30 @@ export default function FacultySearch() {
     }
   };
 
+  const loadCurrentStudent = async () => {
+    try {
+      const userData = await AsyncStorage.getItem('currentUser');
+      if (userData) {
+        const parsed = JSON.parse(userData);
+        if (parsed.userType === 'student') setCurrentStudent(parsed);
+      }
+    } catch (e) {}
+  };
+
   const filterFaculty = () => {
-    if (!searchQuery.trim()) {
+    const query = (searchQuery || '').toLowerCase().trim();
+    if (!query) {
       setFilteredFaculty([]);
       return;
     }
 
-    const filtered = facultyList.filter(faculty =>
-      faculty.staffName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      faculty.staffId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      faculty.department.toLowerCase().includes(searchQuery.toLowerCase())
+    const safeLower = (val: any) => (typeof val === 'string' ? val.toLowerCase() : '');
+    const filtered = facultyList.filter((faculty: any) =>
+      safeLower(faculty?.staffName).includes(query) ||
+      safeLower(faculty?.staffId).includes(query) ||
+      safeLower(faculty?.department).includes(query)
     );
-    
+
     setFilteredFaculty(filtered);
   };
 
@@ -61,6 +75,46 @@ export default function FacultySearch() {
       pathname: '/faculty-profile',
       params: { staffId: faculty.staffId }
     });
+  };
+
+  const sendFollowRequest = async (faculty: Faculty) => {
+    if (!currentStudent) {
+      Alert.alert('Login required', 'Please login as student to send requests');
+      return;
+    }
+
+    try {
+      const facultyKey = `faculty_${faculty.staffId}`;
+      const raw = await AsyncStorage.getItem(facultyKey);
+      if (!raw) {
+        Alert.alert('Error', 'Faculty not found');
+        return;
+      }
+      const facultyData = JSON.parse(raw);
+      facultyData.followRequests = Array.isArray(facultyData.followRequests) ? facultyData.followRequests : [];
+
+      const alreadyFollower = Array.isArray(facultyData.followers) && facultyData.followers.includes(currentStudent.registerNumber);
+      const alreadyRequested = facultyData.followRequests.some((r: any) => r.registerNumber === currentStudent.registerNumber);
+      if (alreadyFollower) {
+        Alert.alert('Info', 'You already follow this faculty');
+        return;
+      }
+      if (alreadyRequested) {
+        Alert.alert('Info', 'Follow request already sent');
+        return;
+      }
+
+      facultyData.followRequests.push({
+        registerNumber: currentStudent.registerNumber,
+        studentName: currentStudent.studentName,
+        department: currentStudent.department,
+        requestedAt: new Date().toISOString(),
+      });
+      await AsyncStorage.setItem(facultyKey, JSON.stringify(facultyData));
+      Alert.alert('Success', 'Follow request sent');
+    } catch (error) {
+      Alert.alert('Error', 'Could not send request');
+    }
   };
 
   const renderFacultyItem = ({ item }: { item: Faculty }) => (
@@ -76,6 +130,11 @@ export default function FacultySearch() {
         <Text style={styles.staffId}>Staff ID: {item.staffId}</Text>
         <Text style={styles.department}>{item.department}</Text>
         <Text style={styles.designation}>{item.designation}</Text>
+        <View style={styles.actionsRow}>
+          <TouchableOpacity style={styles.followButton} onPress={() => sendFollowRequest(item)}>
+            <Text style={styles.followButtonText}>Follow</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -177,6 +236,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    marginTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  followButton: {
+    backgroundColor: colors.secondary.main,
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  followButtonText: {
+    color: colors.white,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
   },
   avatarContainer: {
     width: 48,

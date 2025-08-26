@@ -47,7 +47,7 @@ export default function FacultyHome() {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: spacing.xl }}>
       <View style={styles.header}>
         <Text style={styles.welcomeText}>Welcome back,</Text>
         <Text style={styles.nameText}>{facultyData.staffName}</Text>
@@ -89,6 +89,17 @@ export default function FacultyHome() {
           <View style={styles.actionContent}>
             <Text style={styles.actionTitle}>Calendar</Text>
             <Text style={styles.actionSubtitle}>Manage schedules</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionCard}
+          onPress={() => router.push('/announcements')}
+        >
+          <MessageCircle size={24} color={colors.secondary.main} />
+          <View style={styles.actionContent}>
+            <Text style={styles.actionTitle}>Announcements</Text>
+            <Text style={styles.actionSubtitle}>Notify your followers</Text>
           </View>
         </TouchableOpacity>
       </View>

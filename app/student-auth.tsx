@@ -63,6 +63,7 @@ export default function StudentAuth() {
       const studentData = {
         ...formData,
         followedFaculty: [],
+        pendingFollowRequests: [],
         completedAssignments: [],
         quizResults: [],
         createdAt: new Date().toISOString(),

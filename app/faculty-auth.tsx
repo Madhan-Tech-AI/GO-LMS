@@ -68,6 +68,7 @@ export default function FacultyAuth() {
       const facultyData = {
         ...formData,
         followers: [],
+        followRequests: [],
         materialsUploaded: 0,
         createdAt: new Date().toISOString(),
       };
